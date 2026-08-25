@@ -1,0 +1,29 @@
+/* Generated into build/scroll/ from this template, one per name, purely to make
+   the menu list long enough to scroll. Kept small (putstr, not printf) so a pile
+   of them still fits on a 35-track disk. */
+
+#include <cmoc.h>
+#include <coco.h>
+
+static void say(byte col, byte row, const char *s)
+{
+  locate(col, row);
+  putstr((char *) s, strlen(s));
+}
+
+int main(void)
+{
+  byte k = 0;
+
+  width(32);
+  cls(1);
+  say(0, 0, "@NAME@ IS RUNNING");
+  say(0, 2, "IT SCROLLED, YOU PICKED IT,");
+  say(0, 3, "AND IT CAME BACK.");
+  say(0, 5, "PRESS A KEY FOR THE MENU.");
+
+  while (!k)
+    k = inkey();
+
+  return 0;
+}

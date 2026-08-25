@@ -1,0 +1,10 @@
+*.asm
+*.bin
+*.dsk
+*.link
+*.lst
+*.map
+*.o
+*.s
+/AUTOEXEC.BAS
+build/
