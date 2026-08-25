@@ -10,13 +10,24 @@ every disk.
 
 ## Requirements
 
-**HDB-DOS is what makes the automatic return work.** After a machine-language
-program returns, the menu cold-starts the machine, and HDB-DOS runs `AUTOEXEC.BAS`
-on a cold start - that is what brings the menu back.
+**HDB-DOS is what makes the return work.** It runs `AUTOEXEC.BAS` on a cold
+start, and that is what brings the menu back:
 
-On stock RS-DOS the menu still runs and still launches programs, but nothing
-restarts it afterwards: `AUTOEXEC.BAS` does not autoboot (type `RUN"AUTOEXEC"` to
-start it) and a returning program leaves you at `OK`.
+| program type | getting back to the menu |
+|---|---|
+| machine language | automatic - the menu cold-starts once the program returns |
+| BASIC | type **`DOS`** at the `OK` prompt |
+
+`DOS` works because HDB-DOS's `DOSCOM` reads track 34 sector 1 and, finding no
+OS-9 header, falls through to `DOAUTO` and runs `AUTOEXEC.BAS`
+(`hdbdos.asm:2525`, `:4041`). BASIC keeps control of the machine when a BASIC
+program ends, so there is nothing the menu can do to return by itself - but `DOS`
+is one word and needs no cooperation from the program.
+
+On stock RS-DOS neither route works. The menu still runs and still launches
+programs, but `AUTOEXEC.BAS` does not autoboot (type `RUN"AUTOEXEC"` to start it),
+a returning machine-language program leaves you at `OK`, and `DOS` tries to boot
+OS-9 rather than falling back to `AUTOEXEC.BAS`.
 
 Also assumed:
 
@@ -37,11 +48,9 @@ file type.
 
 **BASIC programs** are started with `RUN"NAME"`. Basic's RUN entry takes the
 character at CHARAD in A: `'M'` selects RUNM, anything else falls through to the
-plain filename form (`hdbdos.asm:1782`). Basic keeps control from there, so when
-the program ends you are at the `OK` prompt. Typing **`DOS`** brings the menu
-back: HDB-DOS's `DOSCOM` reads track 34 sector 1, and when it is not an OS-9
-header it branches to `DOAUTO`, which runs `AUTOEXEC.BAS` (`hdbdos.asm:2525`,
-`:4041`). There is no automatic return for BASIC programs, and none is needed.
+plain filename form (`hdbdos.asm:1782`). Basic keeps control from there, so the
+program ends at the `OK` prompt and `DOS` brings the menu back - see
+[Requirements](#requirements).
 
 **Machine-language programs** go through a stub, which gets control back by
 itself and needs no cooperation from the program:
