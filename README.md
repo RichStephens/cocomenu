@@ -1,10 +1,32 @@
 # cocomenu
 
 A small TRS-80 Color Computer program that reads the directory of the disk it
-booted from, lists the other machine-language programs on it, and runs the one
-you pick. When that program exits, **you come back to the menu.**
+booted from, lists the other programs on it - machine language and BASIC - and
+runs the one you pick. When a machine-language program exits, **you come back to
+the menu**, and it needs no changes to do so.
 
-Like BITSY BYE on the Apple II. Small enough to drop on every disk.
+Like BITSY BYE on the Apple II. 2050 bytes, one granule, small enough to drop on
+every disk.
+
+## Requirements
+
+**HDB-DOS is what makes the automatic return work.** After a machine-language
+program returns, the menu cold-starts the machine, and HDB-DOS runs `AUTOEXEC.BAS`
+on a cold start - that is what brings the menu back.
+
+On stock RS-DOS the menu still runs and still launches programs, but nothing
+restarts it afterwards: `AUTOEXEC.BAS` does not autoboot (type `RUN"AUTOEXEC"` to
+start it) and a returning program leaves you at `OK`.
+
+Also assumed:
+
+- **Disk Basic 1.1.** `$CFC1` (LOADM) and `$AE75` (RUN) are ROM entry points, taken
+  from `hdbdos.asm`. Disk Basic 1.0 may place them elsewhere.
+- **A 35-track single-sided RS-DOS disk** - directory on track 17, 68 granules, so
+  at most 68 files.
+- **The 32-column text screen.** The menu does not call `width(32)`, since it is
+  only ever entered from a cold start where that is already the mode. Loading it
+  by hand from a CoCo 3 in 40- or 80-column mode will draw wrong.
 
 ## How it runs things, and gets back
 
