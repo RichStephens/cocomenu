@@ -7,5 +7,4 @@
    path. Does not return to the caller either way. */
 void run_file(const char *filename, byte is_basic);
 
-
 #endif /* LOADER_H */

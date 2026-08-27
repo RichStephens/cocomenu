@@ -1,4 +1,5 @@
 NAME     = cocomenu
+NAME_UC := $(shell echo $(NAME) | tr a-z A-Z)
 
 # Where the menu is linked. Every launch goes through Disk Basic's LOADM and a
 # stub in the cassette buffer, so the menu never has to survive what it starts -
@@ -16,12 +17,11 @@ SIZE_LIMIT = $(shell expr $(GRANULE) \* $(GRANULES))
 
 CMOC     = cmoc
 DECB     = decb
-WRITECOCOFILE = writecocofile
 
 MENU_SRCS = src/dirent.c src/dsk.c src/loader.c src/main.c
 HDRS      = $(wildcard src/*.h)
 
-CFLAGS   = --coco -Isrc -DMENU_NAME=\"$(shell echo $(NAME) | tr a-z A-Z)\"
+CFLAGS   = --coco -Isrc -DMENU_NAME=\"$(NAME_UC)\"
 
 BIN = $(NAME).bin
 DSK = $(NAME).dsk
@@ -45,7 +45,7 @@ $(BIN): $(MENU_SRCS) $(HDRS)
 	echo "$@: $$sz bytes, $$(( $(SIZE_LIMIT) - $$sz )) spare in $(GRANULES) granule(s)"
 
 AUTOEXEC.BAS:
-	@printf '10 LOADM"%s":EXEC\n' $(shell echo $(NAME) | tr a-z A-Z) > $@
+	@printf '10 LOADM"%s":EXEC\n' $(NAME_UC) > $@
 
 # Demo programs, only put on the disk by `make testdisk`.
 TEST_ORG   = 0E00
@@ -77,8 +77,8 @@ testdisk:
 
 $(DSK): $(BIN) AUTOEXEC.BAS $(if $(TESTS),$(TEST_BINS) $(TEST_BAS) tests/scroll.c.in)
 	$(DECB) dskini $@
-	$(WRITECOCOFILE) -b $@ $(BIN)
-	$(WRITECOCOFILE) -n $@ AUTOEXEC.BAS
+	$(DECB) copy -b -2 $(BIN) $@,$(NAME_UC).BIN
+	$(DECB) copy -a -0 -l AUTOEXEC.BAS $@,AUTOEXEC.BAS
 ifdef TESTS
 	@mkdir -p $(SCROLL_DIR)
 	@for n in $$(seq 1 $(SCROLL_N)); do \
@@ -86,9 +86,9 @@ ifdef TESTS
 		sed "s/@NAME@/PROG$$nn/g" tests/scroll.c.in > $(SCROLL_DIR)/prog$$nn.c; \
 		$(CMOC) --coco --org=$(TEST_ORG) -o $(SCROLL_DIR)/prog$$nn.bin $(SCROLL_DIR)/prog$$nn.c || exit 1; \
 	done
-	@for f in $(TEST_BINS); do $(WRITECOCOFILE) -b $@ $$f; done
-	@for f in $(TEST_BAS); do $(WRITECOCOFILE) -n $@ $$f; done
-	@for f in $(SCROLL_DIR)/*.bin; do $(WRITECOCOFILE) -b $@ $$f; done
+	@for f in $(TEST_BINS); do $(DECB) copy -b -2 $$f $@,`basename $$f | tr a-z A-Z`; done
+	@for f in $(TEST_BAS); do $(DECB) copy -a -0 -l $$f $@,`basename $$f | tr a-z A-Z`; done
+	@for f in $(SCROLL_DIR)/*.bin; do $(DECB) copy -b -2 $$f $@,`basename $$f | tr a-z A-Z`; done
 endif
 	@$(DECB) dir $@
 

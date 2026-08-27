@@ -183,12 +183,23 @@ static void launch(byte sel)
     base[i] = names[sel][i];
   base[i] = '\0';
 
+  fill_row(LAST_ROW, BLANK_CELL);
+  say(0, LAST_ROW, "RUNNING: ");
+  say(9, LAST_ROW, base);
+  say(9 + i, LAST_ROW, types[sel] == DECB_TYPE_BASIC ? ".BAS" : ".BIN");
+
   run_file(base, types[sel] == DECB_TYPE_BASIC);   /* does not return */
 }
 
 int main(void)
 {
   byte sel = 0, top = 0, key, prev_sel, prev_top;
+
+  /* The cold start does not undo width(80), and the menu draws straight to the
+     32-column VDG screen, so put the video mode back before drawing. */
+  initCoCoSupport();
+  if (isCoCo3)
+    width(32);
 
   dsk_init();
   scan_disk();

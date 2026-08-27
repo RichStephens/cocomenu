@@ -146,7 +146,7 @@ crash.
 
 ## Build
 
-Needs `cmoc`, `decb` and `writecocofile` on `PATH`.
+Needs `cmoc` and `decb` on `PATH`.
 
     make            # same as `make disk`
     make disk       # cocomenu.dsk: the menu and its AUTOEXEC, nothing else
@@ -159,8 +159,8 @@ a mix of the two. Nothing is copied anywhere; deploying is a separate step.
 
 To put the menu on an existing disk image:
 
-    writecocofile -b yourdisk.dsk cocomenu.bin
-    writecocofile -n yourdisk.dsk AUTOEXEC.BAS
+    decb copy -b -2 cocomenu.bin yourdisk.dsk,COCOMENU.BIN
+    decb copy -a -0 -l AUTOEXEC.BAS yourdisk.dsk,AUTOEXEC.BAS
 
 ## Layout
 
