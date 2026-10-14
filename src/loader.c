@@ -15,6 +15,8 @@
 /* CLEAR leaves Basic's stack too low for a big program; use a cold-boot one. */
 #define BIG_STACK 0x7F00
 
+#define STUB_DISK 18   /* offset of the LDD operand */
+
 static const byte stub[] = {
   0x10, 0xCE, (byte) (BIG_STACK >> 8), (byte) BIG_STACK,
                             /* LDS  #BIG_STACK                        */
@@ -22,6 +24,9 @@ static const byte stub[] = {
   0x7F, 0xFF, 0x40,         /* CLR  $FF40    drive motor off          */
   0xAD, 0x9F, 0x00, 0x9D,   /* JSR  [$009D]  call the loaded program  */
   0x7F, 0x00, 0x71,         /* CLR  $0071    clear warm-start flag    */
+  0xCC, 0x00, 0x00,         /* LDD  #disk,~disk                       */
+  0xFD, (byte) (SAVED_DISK_ADDR >> 8), (byte) SAVED_DISK_ADDR,
+                            /* STD  SAVED_DISK                        */
   0x7E, 0xA0, 0x27          /* JMP  $A027    cold start               */
 };
 
@@ -46,10 +51,13 @@ void run_file(const char *filename, byte is_basic)
 
   /* Machine language: plant the stub, then hand it the command line LOADM
      parses - any byte, a quote, the name, then NUL as end of line. The stub
-     calls LOADM, calls the program, and resets when it returns. Extended addressing all through the stub, since a
-     program that has just returned leaves DP set to anything it likes. */
+     calls LOADM, calls the program, and resets when it returns. Extended
+     addressing all through the stub, since a program that has just returned
+     leaves DP set to anything it likes. */
   for (i = 0; i < sizeof(stub); i++)
     CB_STUB[i] = stub[i];
+  CB_STUB[STUB_DISK] = dsk_drive;
+  CB_STUB[STUB_DISK + 1] = (byte) ~dsk_drive;
 
   *CB_ANCHOR = ' ';
   *CB_QUOTE = '"';

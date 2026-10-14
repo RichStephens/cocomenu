@@ -5,8 +5,11 @@ booted from, lists the other programs on it - machine language and BASIC - and
 runs the one you pick. When a machine-language program exits, **you come back to
 the menu**, and it needs no changes to do so.
 
-Like BITSY BYE on the Apple II. 2050 bytes, one granule, small enough to drop on
+Like BITSY BYE on the Apple II. About 3K, two granules, small enough to drop on
 every disk.
+
+On an HDB-DOS image holding several 157K disks, the left and right arrows move
+between them. Put the menu and `AUTOEXEC.BAS` on each disk.
 
 ## Requirements
 
@@ -35,9 +38,7 @@ Also assumed:
   from `hdbdos.asm`. Disk Basic 1.0 may place them elsewhere.
 - **A 35-track single-sided RS-DOS disk** - directory on track 17, 68 granules, so
   at most 68 files.
-- **The 32-column text screen.** The menu does not call `width(32)`, since it is
-  only ever entered from a cold start where that is already the mode. Loading it
-  by hand from a CoCo 3 in 40- or 80-column mode will draw wrong.
+- **The 32-column text screen.** On a CoCo 3 the menu calls `width(32)` first.
 
 ## How it runs things, and gets back
 
@@ -60,7 +61,7 @@ file's entry point at `$9D`, and **returns** - which is exactly how the `RUNM`
 patch in `hdbdos.asm` uses it (`jsr >LCFC1   Do a LOADM...`). Being ROM, it can
 copy a program straight over the menu without harming itself.
 
-So the menu plants a 20-byte stub in the cassette buffer at `$01F0` - below the
+So the menu plants a 26-byte stub in the cassette buffer at `$01F0` - below the
 DOS area, out of reach of anything loading at `$0E00` - and jumps to it:
 
     LDS  #$7F00     give the program a normal high stack
@@ -68,6 +69,8 @@ DOS area, out of reach of anything loading at `$0E00` - and jumps to it:
     CLR  $FF40      drive motor off
     JSR  [$009D]    call the loaded program
     CLR  $0071      clear the warm-start flag
+    LDD  #disk,~disk
+    STD  $0989      remember the disk
     JMP  $A027      cold start
 
 The program returns to the stub the same way it would return to any caller -
@@ -75,6 +78,11 @@ every CMOC program does, because `exit()` and returning from `main` both end in
 `LDS INISTK` / `RTS`, which pops the caller's return address. Nothing in the
 launched program knows the menu exists. The cold start then makes HDB-DOS re-run
 `AUTOEXEC.BAS`, and the menu is back.
+
+The cold start clears the first 1K of RAM, stub included, and Disk Basic's
+variables, which resets the drive to 0. It leaves the random file buffer at
+`$0989` alone, so the menu reopens on the disk the program came from. A BASIC
+program needs none of this: `DOS` does not cold-start, so the drive is still set.
 
 Because the menu is disposable, **a program may load anywhere and be any size.**
 There is no overlap check, no address arithmetic, and no constraint tying the
@@ -84,9 +92,7 @@ menu's address to what it can run.
 
 Nothing goes through Basic's console. The menu writes screen cells directly at
 `$0400`: the VDG character index is the low 6 bits of ASCII and bit 6 set means
-normal video, so a cell is `(ascii & $3F) | $40`. That replaced `locate`, `cls`,
-`putstr`, `putchar` and `strlen` - 257 bytes of ROM wrappers - with about 50, and
-it sidesteps CHROUT's scroll-on-last-cell behavior entirely.
+normal video, so a cell is `(ascii & $3F) | $40`.
 
 The screen shows 13 names at a time between two thin cyan rules, drawn with VDG
 semigraphics-4 blocks (`1 CCC LLLL` - bit 7 set, bits 6-4 color, low nibble the
@@ -94,8 +100,12 @@ lit quadrants). The rules use half-height blocks so they sit tight against the
 list. The selected name is a full-width reverse-video bar: in alphanumeric mode
 bit 6 is the inverse bit, so the row's cells are simply raised by `$40`.
 
-A longer list scrolls with the selection, and a solid orange block appears at the
+A longer list scrolls with the selection, and a cyan triangle appears at the
 right end of the top or bottom rule when there are more names off that end.
+
+The disk's HDB-DOS title (`RENAME DRIVE n,"TITLE"`) is set into the top rule,
+uppercased, up to 25 characters. When the image holds more than one disk, the
+bottom rule reads `</>=DISK 1 OF 2`.
 
 Keys:
 
@@ -103,15 +113,29 @@ Keys:
 |---|---|
 | up / down | move one name |
 | SHIFT + up / down | page by 13 |
+| left / right | previous / next disk |
 | ENTER | run the selected program |
+| BREAK | clear the screen and return to BASIC, on the current disk |
 
 `MAX_ENTRIES` is 68, which a disk cannot exceed: a 35-track disk has 68 granules
 and every file needs at least one, so 68 files is the physical maximum. The cap
 costs nothing on disk - the name table is BSS, which is not in the .bin.
 
+## Disks in an image
+
+`DRIVE n` in HDB-DOS checks n against its maximum and stores it in `DEFDRV`
+(`$095A`). The arrows set it the same way, and LOADM and RUN take their drive
+from it.
+
+At startup the menu counts the disks by reading each one's title sector until a
+read fails. FujiNet answers a sector past the end of the image with an error,
+so the count costs one failed read. This only happens when DSKCON starts with a
+`JMP`, which is how HDB-DOS reroutes it. Stock Disk Basic would probe real floppy
+drives instead, so there the menu does not count disks.
+
 ## Trying it
 
-    make disk
+    make testdisk
 
 Builds `cocomenu.dsk` - the only disk this repo produces - carrying the menu plus:
 
@@ -119,12 +143,12 @@ Builds `cocomenu.dsk` - the only disk this repo produces - carrying the menu plu
 |---|---|---|
 | `HELLO.BIN` | `$0E00` | prints, waits, returns from `main` -> you land back in the menu |
 | `COUNT.BIN` | `$0E00` | counts to 10 and returns; run it twice to prove the menu really survived |
-| `TOOBIG.BIN` | `$7000` | linked on top of the menu on purpose, so it goes through Disk Basic's LOADM and the stub, running and then rebooting back to the menu |
+| `TOOBIG.BIN` | `$2800` | linked at the menu's own address, so it loads over the menu and still comes back |
 | `PROG01`..`PROG20` | `$0E00` | 787-byte filler, so the list runs past the 13 visible rows and scrolls |
 
-That is 23 names against 13 rows, so the list scrolls and the `^` / `V` marks
-appear. Each `PROGnn` announces which one it is, so you can confirm the menu ran
-the one you actually selected rather than an off-by-one neighbor.
+That is 23 names against 13 rows, so the list scrolls and the triangles appear.
+Each `PROGnn` announces which one it is, so you can confirm the menu ran the one
+you actually selected rather than an off-by-one neighbor.
 
 `make testdisk SCROLL_N=40` generates more filler if you want a longer list.
 
@@ -133,16 +157,14 @@ stock Disk Basic it does not, so type:
 
     RUN"AUTOEXEC"
 
-Then use the up/down arrows, SHIFT+up/down to page, and ENTER. Nothing in
+Then use the arrows, SHIFT+up/down to page, and ENTER. Nothing in
 `HELLO.BIN` or `COUNT.BIN` knows the menu exists - coming back is entirely CMOC's
 `LDS INISTK` / `RTS` exit path landing on the return address the menu's `JSR`
 pushed.
 
-Picking `TOOBIG.BIN` should stop and warn instead of running straight in. If you
-accept, Disk Basic loads it and the stub calls it; pressing a key inside it
-returns to the stub, which cold-starts, and `AUTOEXEC.BAS` brings the menu back.
-The reboot is visible and takes a moment - that is the intended behavior, not a
-crash.
+`TOOBIG.BIN` loads over the menu. Disk Basic loads it and the stub calls it;
+pressing a key inside it returns to the stub, which cold-starts, and
+`AUTOEXEC.BAS` brings the menu back.
 
 ## Build
 
@@ -166,7 +188,7 @@ To put the menu on an existing disk image:
 
     src/dsk.c      sector reads via the DSKCON ROM vector at $C004
     src/dirent.c   RS-DOS directory walk (track 17, sectors 3-18)
-    src/loader.c   granule-chain file reader, DECB segment loader, launch
+    src/loader.c   launch through Disk Basic's LOADM or RUN
     src/main.c     the menu itself
 
 Disk access goes straight at DSKCON rather than through cmoc's `<disk.h>`,

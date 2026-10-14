@@ -8,11 +8,10 @@ NAME_UC := $(shell echo $(NAME) | tr a-z A-Z)
 ORG      = 2800
 LIMIT    = 8000
 
-# A DECB granule is 2304 bytes, and crossing a boundary silently doubles what
-# the file costs on disk. Fail the build instead of finding out later. Build
-# with GRANULES=2 if a bigger menu is genuinely wanted.
+# A DECB granule is 2304 bytes, and crossing a boundary silently adds one to
+# what the file costs on disk. Fail the build instead of finding out later.
 GRANULE    = 2304
-GRANULES   = 1
+GRANULES   = 2
 SIZE_LIMIT = $(shell expr $(GRANULE) \* $(GRANULES))
 
 CMOC     = cmoc
@@ -31,7 +30,7 @@ DSK = $(NAME).dsk
 .PHONY: disk testdisk clean size
 
 $(BIN): $(MENU_SRCS) $(HDRS)
-	$(CMOC) $(CFLAGS) --org=$(ORG) --limit=$(LIMIT) -DMENU_ORG=0x$(ORG) -o $@ $(MENU_SRCS)
+	$(CMOC) $(CFLAGS) --org=$(ORG) --limit=$(LIMIT) -o $@ $(MENU_SRCS)
 	@sz=`stat -c%s $@`; \
 	if [ $$sz -gt $(SIZE_LIMIT) ]; then \
 		echo ""; \
@@ -56,7 +55,7 @@ SCROLL_N   = 20
 SCROLL_DIR = build/scroll
 
 tests/toobig.bin: tests/toobig.c
-	$(CMOC) --coco --org=7000 -o $@ $<
+	$(CMOC) --coco --org=$(ORG) -o $@ $<
 
 tests/%.bin: tests/%.c
 	$(CMOC) --coco --org=$(TEST_ORG) -o $@ $<
@@ -96,7 +95,7 @@ endif
 # generates never land in the repo.
 size: $(BIN)
 	@t=`mktemp -d`; \
-	$(CMOC) $(CFLAGS) --org=$(ORG) --limit=FFFF --intermediate -DMENU_ORG=0x$(ORG) \
+	$(CMOC) $(CFLAGS) --org=$(ORG) --limit=FFFF --intermediate \
 		-o $$t/probe.bin $(MENU_SRCS) >/dev/null 2>&1; \
 	pe=`grep '^Symbol: .02program_end' $$t/probe.map | sed 's/.*= //'`; \
 	sz=`stat -c%s $(BIN)`; \

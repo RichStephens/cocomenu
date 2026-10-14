@@ -16,6 +16,8 @@
 #define ROWS_VISIBLE 13
 #define RULE_BOT     14
 #define LAST_ROW     15
+#define LABEL_COL    2
+#define LABEL_MAX    25   /* stops short of the rule's scroll triangle */
 
 #define SCREEN      ((byte *) 0x0400)
 #define SCREEN_COLS 32
@@ -50,12 +52,15 @@ static byte *row_ptr(byte row)
   return SCREEN + ((word) row << 5);
 }
 
-static void say(byte col, byte row, const char *s)
+static byte say(byte col, byte row, const char *s)
 {
   byte *p = row_ptr(row) + col;
 
-  while (*s)
+  while (*s) {
     *p++ = (byte) ((*s++ & 0x3F) | NORMAL_VIDEO);
+    col++;
+  }
+  return col;
 }
 
 
@@ -120,28 +125,89 @@ static void scan_disk(void)
   }
 }
 
-/* Drawn once; nothing here changes as the selection moves. */
+/* Subtraction, so cmoc's division helpers stay unlinked. */
+static byte say_num(byte col, byte row, byte v)
+{
+  char d[4];
+  char *p = d;
+  byte h = 0, t = 0;
+
+  while (v >= 100) {
+    v -= 100;
+    h++;
+  }
+  while (v >= 10) {
+    v -= 10;
+    t++;
+  }
+  if (h)
+    *p++ = (char) ('0' + h);
+  if (h || t)
+    *p++ = (char) ('0' + t);
+  *p++ = (char) ('0' + v);
+  *p = '\0';
+  return say(col, row, d);
+}
+
+/* Text set into a rule, with a blank cell either side. */
+static void rule_label(byte row, const char *s)
+{
+  *(row_ptr(row) + LABEL_COL - 1) = BLANK_CELL;
+  *(row_ptr(row) + say(LABEL_COL, row, s)) = BLANK_CELL;
+}
+
+/* The VDG has no lowercase, and (c & $3F) would turn it into punctuation. */
+static void draw_title(void)
+{
+  char title[LABEL_MAX + 1];
+  byte i, c;
+
+  if (!dsk_read(dsk_buf, DIR_TRACK, TITLE_SECTOR) || dsk_buf[0] == 0xFF)
+    return;
+
+  for (i = 0; i < LABEL_MAX; i++) {
+    c = dsk_buf[i];
+    if (c < ' ' || c > 'z')
+      break;
+    if (c >= 'a')
+      c -= 'a' - 'A';
+    title[i] = (char) c;
+  }
+  title[i] = '\0';
+
+  if (i)
+    rule_label(RULE_TOP, title);
+}
+
+/* Redrawn only when the disk changes. */
 static void draw_frame(void)
 {
+  byte col;
+
   /* No screen wipe: every row is painted by someone - 0 and 14 here, 1-13 by
      draw_list, 15 just below. */
   fill_row(RULE_TOP, SG(SG_CYAN, QUAD_BOT));
   fill_row(RULE_BOT, SG(SG_CYAN, QUAD_TOP));
+  draw_title();
 
   fill_row(LAST_ROW, BLANK_CELL);
-  say(0, LAST_ROW, "UP/DN SHFT=PAGE ENTER=RUN");
+  say(0, LAST_ROW, "UP/DN SHFT=PG ENTER=RUN BRK=EXIT");
+
+  if (dsk_count < 2)
+    return;
+
+  rule_label(RULE_BOT, "</>=DISK ");
+  col = say_num(LABEL_COL + 9, RULE_BOT, dsk_drive + 1);
+  col = say(col, RULE_BOT, " OF ");
+  col = say_num(col, RULE_BOT, dsk_count);
+  *(row_ptr(RULE_BOT) + col) = BLANK_CELL;
 }
 
-/* Only for a window change; moving within a page just moves the highlight. */
+/* Only for a window or disk change; moving within a page just moves the
+   highlight. */
 static void draw_list(byte sel, byte top)
 {
   byte i, row;
-
-  if (!count) {
-    fill_row(FIRST_ROW, BLANK_CELL);
-    say(1, FIRST_ROW, "NO PROGRAMS");
-    return;
-  }
 
   for (i = 0; i < ROWS_VISIBLE; i++) {
     row = top + i;
@@ -152,6 +218,9 @@ static void draw_list(byte sel, byte top)
     if (row == sel)
       flip_row(FIRST_ROW + i);
   }
+
+  if (!count)
+    say(1, FIRST_ROW, "NO PROGRAMS");
 
   if (top)
     rule_end(RULE_TOP, Q_LR, QUAD_ALL, Q_LL);
@@ -193,7 +262,7 @@ static void launch(byte sel)
 
 int main(void)
 {
-  byte sel = 0, top = 0, key, prev_sel, prev_top;
+  byte sel, top, key, prev_sel, prev_top;
 
   /* The cold start does not undo width(80), and the menu draws straight to the
      32-column VDG screen, so put the video mode back before drawing. */
@@ -202,47 +271,69 @@ int main(void)
     width(32);
 
   dsk_init();
-  scan_disk();
-
-  draw_frame();
-  draw_list(sel, top);
 
   for (;;) {
-    key = wait_key();
+    scan_disk();
+    sel = top = 0;
+    draw_frame();
+    draw_list(sel, top);
 
-    prev_sel = sel;
-    prev_top = top;
+    for (;;) {
+      key = wait_key();
 
-    if (key == KEY_DOWN_ARROW) {
-      if (sel + 1 < count)
-        sel++;
-    } else if (key == KEY_UP_ARROW) {
-      if (sel)
-        sel--;
-    } else if (key == KEY_SHIFT_DOWN && count) {
-      if (sel + ROWS_VISIBLE < count)
-        sel += ROWS_VISIBLE;
-      else
-        sel = count - 1;
-    } else if (key == KEY_SHIFT_UP) {
-      if (sel > ROWS_VISIBLE)
-        sel -= ROWS_VISIBLE;
-      else
-        sel = 0;
-    } else if (key == KEY_ENTER && count) {
-      launch(sel);              /* does not return */
-    }
+      /* $A928 clears the screen and homes BASIC's cursor. AUTOEXEC.BAS ends
+         after the EXEC this returns to, leaving BASIC at OK on this disk. */
+      if (key == KEY_BREAK) {
+        asm
+        {
+          jsr $A928
+        }
+        return 0;
+      }
 
-    if (sel < top)
-      top = sel;
-    if (sel >= top + ROWS_VISIBLE)
-      top = sel - ROWS_VISIBLE + 1;
+      if (key == KEY_RIGHT_ARROW && dsk_drive + 1 < dsk_count) {
+        dsk_select(dsk_drive + 1);
+        break;
+      }
+      if (key == KEY_LEFT_ARROW && dsk_drive) {
+        dsk_select(dsk_drive - 1);
+        break;
+      }
 
-    if (top != prev_top)
-      draw_list(sel, top);
-    else if (sel != prev_sel) {
-      flip_row(FIRST_ROW + prev_sel - top);
-      flip_row(FIRST_ROW + sel - top);
+      prev_sel = sel;
+      prev_top = top;
+
+      if (key == KEY_DOWN_ARROW) {
+        if (sel + 1 < count)
+          sel++;
+      } else if (key == KEY_UP_ARROW) {
+        if (sel)
+          sel--;
+      } else if (key == KEY_SHIFT_DOWN && count) {
+        if (sel + ROWS_VISIBLE < count)
+          sel += ROWS_VISIBLE;
+        else
+          sel = count - 1;
+      } else if (key == KEY_SHIFT_UP) {
+        if (sel > ROWS_VISIBLE)
+          sel -= ROWS_VISIBLE;
+        else
+          sel = 0;
+      } else if (key == KEY_ENTER && count) {
+        launch(sel);              /* does not return */
+      }
+
+      if (sel < top)
+        top = sel;
+      if (sel >= top + ROWS_VISIBLE)
+        top = sel - ROWS_VISIBLE + 1;
+
+      if (top != prev_top)
+        draw_list(sel, top);
+      else if (sel != prev_sel) {
+        flip_row(FIRST_ROW + prev_sel - top);
+        flip_row(FIRST_ROW + sel - top);
+      }
     }
   }
 
