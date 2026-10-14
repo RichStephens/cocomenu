@@ -8,3 +8,4 @@
 *.s
 /AUTOEXEC.BAS
 build/
+dist/

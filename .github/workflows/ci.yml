@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: fozztexx/defoogi:1.4.8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The test disk builds the menu, its granule check and every demo program.
+      - name: Build
+        run: make testdisk

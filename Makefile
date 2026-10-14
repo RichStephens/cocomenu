@@ -25,9 +25,12 @@ CFLAGS   = --coco -Isrc -DMENU_NAME=\"$(NAME_UC)\"
 BIN = $(NAME).bin
 DSK = $(NAME).dsk
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
+DIST     = dist
+
 .DEFAULT_GOAL := disk
 
-.PHONY: disk testdisk clean size
+.PHONY: disk testdisk release clean size
 
 $(BIN): $(MENU_SRCS) $(HDRS)
 	$(CMOC) $(CFLAGS) --org=$(ORG) --limit=$(LIMIT) -o $@ $(MENU_SRCS)
@@ -91,6 +94,12 @@ ifdef TESTS
 endif
 	@$(DECB) dir $@
 
+# The zip a GitHub release carries. Built from `make disk`, so no demo programs.
+release: disk
+	@rm -rf $(DIST)
+	@mkdir -p $(DIST)
+	zip -j $(DIST)/$(NAME)-$(VERSION).zip $(BIN) AUTOEXEC.BAS $(DSK) README.md Changelog.md
+
 # Size report. Builds with --intermediate in a temp dir so the .s/.lst/.o it
 # generates never land in the repo.
 size: $(BIN)
@@ -105,5 +114,5 @@ size: $(BIN)
 
 clean:
 	rm -f $(BIN) $(DSK) $(TEST_BINS) AUTOEXEC.BAS
-	rm -rf $(SCROLL_DIR)
+	rm -rf $(SCROLL_DIR) $(DIST)
 	rm -f src/*.o src/*.asm *.s *.lst *.o *.map *.link

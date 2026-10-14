@@ -168,21 +168,37 @@ pressing a key inside it returns to the stub, which cold-starts, and
 
 ## Build
 
-Needs `cmoc` and `decb` on `PATH`.
+Needs `cmoc`, LWTOOLS' `lwasm` and `lwlink`, and ToolShed's `decb` on `PATH`.
 
     make            # same as `make disk`
     make disk       # cocomenu.dsk: the menu and its AUTOEXEC, nothing else
     make testdisk   # the same image, plus the demo programs
+    make release    # dist/cocomenu-<version>.zip
     make size       # size report
     make clean
 
 Both disk targets write `cocomenu.dsk`, removing it first so the image is never
 a mix of the two. Nothing is copied anywhere; deploying is a separate step.
 
+Each [release](https://github.com/RichStephens/cocomenu/releases) carries
+`cocomenu.bin`, `AUTOEXEC.BAS` and a `cocomenu.dsk` holding just those two.
 To put the menu on an existing disk image:
 
     decb copy -b -2 cocomenu.bin yourdisk.dsk,COCOMENU.BIN
     decb copy -a -0 -l AUTOEXEC.BAS yourdisk.dsk,AUTOEXEC.BAS
+
+## Releasing
+
+1. Rename `[Unreleased]` in `Changelog.md` to the new version and date, and
+   start an empty `[Unreleased]` above it.
+2. Commit and push to `main`.
+3. Tag and push the tag:
+
+       git tag v1.2.3
+       git push origin v1.2.3
+
+The release workflow builds the zip and publishes it with that changelog
+section as the notes. It fails if the newest section does not match the tag.
 
 ## Layout
 
